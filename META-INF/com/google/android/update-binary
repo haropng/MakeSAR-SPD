@@ -1,0 +1,71 @@
+#!/sbin/sh
+# LazyFlasher installer backend (for helper functions only)
+# Heavily modified by Dees_Troy and osm0sis and erfanoabdi
+
+tmp=/dev/tmp/sar-install
+
+# detect when flashing in Magisk Manager
+ps | grep zygote | grep -v grep >/dev/null && BOOTMODE=true || BOOTMODE=false;
+$BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -v grep >/dev/null && BOOTMODE=true;
+
+if [ "$3" ]; then
+	zip=$3
+	console=/proc/$$/fd/$2
+fi
+
+print() {
+	if $BOOTMODE; then
+		echo "$1"
+	else
+		if [ "$1" ]; then
+			echo "ui_print $1" > "$console"
+		else
+			echo "ui_print  " > "$console"
+		fi
+	fi
+}
+
+extract() {
+	rm -rf "$2"
+	mkdir -p "$2"
+	unzip -o "$1" -d "$2" || abort "Failed to extract zip to $2!"
+}
+
+print "########################################"
+print "#  SAR boot patcher for Aonly devices  #"
+print "########################################"
+print
+
+# unpack the installer
+[ "$zip" ] && {
+	print "Unpacking the installer..."
+	extract "$zip" "$tmp"
+	print
+}
+cd "$tmp"
+toolname="/magiskboot"
+tool="$tmp$toolname"
+targetfile="/boot.img"
+target="$tmp$targetfile"
+recoverycpio=`(ls ramdisk-sar.cpio || ls ramdisk-recovery.cpio) 2>/dev/null`
+
+chmod 755 "$tool"
+
+dd if=/dev/block/mmcblk0p32 "of=$target"
+"$tool" unpack -h boot.img
+
+cp -f $recoverycpio ramdisk.cpio
+"$tool" repack boot.img
+dd if=new-boot.img of=/dev/block/mmcblk0p32
+
+"$tool" cleanup
+rm -f new-boot.img
+
+print
+print "Boot image patching complete!"
+
+cd /
+rm -rf /dev/tmp
+
+print
+print "*** NOTE: You are now unrooted! ***"
